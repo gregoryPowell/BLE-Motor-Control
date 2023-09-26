@@ -15,26 +15,37 @@ ACC_Z_UUID = '9ea41596-18f2-45a9-a194-49597368e655'
 PITCH_UUID = '9ea41596-18f3-45a9-a194-49597368e655'
 ROLL_UUID = '9ea41596-18f4-45a9-a194-49597368e655'
 
+class Nunchuk():
+    z_button = 0
+    c_button = 0
+    joystick = [0,0]
+    acc = [0,0,0]
+    pitch = 0
+    roll = 0
+
+nunchuk = Nunchuk()
 
 def notification_handler(sender, data):
     if (sender.uuid == Z_BUTTON_UUID):
-        print("Z button is active: {}".format(bool(data[0])))
+        nunchuk.z_button = int.from_bytes(data, "little")
     elif (sender.uuid == C_BUTTON_UUID):
-        print("C button is active: {}".format(data[0]))
+        nunchuk.c_button = int.from_bytes(data, "little")
     elif (sender.uuid == JOYSTICK_X_UUID):
-        print("Joystick X is active: {}".format(data[0]))
+        nunchuk.joystick[0] = int.from_bytes(data, "little", signed="True")
     elif (sender.uuid == JOYSTICK_Y_UUID):
-        print("Joystick Y is active: {}".format(data[0]))
-    elif (sender.uuid == ACC_X_UUID):
-        print("ACC X is active: {}".format(data[0]))
-    elif (sender.uuid == ACC_Y_UUID):
-        print("ACC Y is active: {}".format(data[0]))
-    elif (sender.uuid == ACC_Z_UUID):
-        print("ACC Z is active: {}".format(data[0]))
-    elif (sender.uuid == PITCH_UUID):
-        print("Pitch is active: {.2f}".format(data[0]))
-    elif (sender.uuid == ROLL_UUID):
-        print("Roll is active: {.2f}".format(data[0]))
+        nunchuk.joystick[1] = int.from_bytes(data, "little", signed="True")
+    if (nunchuk.z_button):
+        if (sender.uuid == ACC_X_UUID):
+            nunchuk.acc[0] = int.from_bytes(data, "little", signed="True")
+        elif (sender.uuid == ACC_Y_UUID):
+            nunchuk.acc[1] = int.from_bytes(data, "little", signed="True")
+        elif (sender.uuid == ACC_Z_UUID):
+            nunchuk.acc[2] = int.from_bytes(data, "little", signed="True")
+    if (nunchuk.c_button):
+        if (sender.uuid == PITCH_UUID):
+            nunchuk.pitch = (int.from_bytes(data, "little", signed="True"))/1000
+        elif (sender.uuid == ROLL_UUID):
+            nunchuk.roll = (int.from_bytes(data, "little", signed="True"))/1000
 
 
 async def run():
@@ -53,7 +64,7 @@ async def run():
     client = BleakClient(device)
 
     try:
-        timer = 30  # seconds
+        timer = 45  # seconds
 
         while timer != 0 or external_heartbeat_received:
             if not client.is_connected:
@@ -71,6 +82,7 @@ async def run():
                     await client.start_notify(ROLL_UUID, notification_handler)
                     print("Notify on...")
             await asyncio.sleep(1)
+            print(nunchuk.z_button, nunchuk.c_button, nunchuk.joystick, nunchuk.acc, nunchuk.pitch, nunchuk.roll)
             timer -= 1
 
             # If timer expired and we received a heartbeat, restart timer and carry on.
