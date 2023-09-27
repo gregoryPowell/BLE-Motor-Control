@@ -1,5 +1,4 @@
 import asyncio
-import uuid
 
 from bleak import BleakClient, BleakScanner
 from bleak.backends.bluezdbus.client import BleakClientBlueZDBus
@@ -16,12 +15,18 @@ PITCH_UUID = '9ea41596-18f3-45a9-a194-49597368e655'
 ROLL_UUID = '9ea41596-18f4-45a9-a194-49597368e655'
 
 class Nunchuk():
-    z_button = 0
-    c_button = 0
-    joystick = [0,0]
-    acc = [0,0,0]
-    pitch = 0
-    roll = 0
+    def __init__(self):
+        self.z_button = 0
+        self.c_button = 0
+        self.joystick = [0,0]
+        self.acc = [0,0,0]
+        self.pitch = 0
+        self.roll = 0
+    
+    def __str__(self):
+        joy_values = [ f"{value:4d}" for value in self.joystick ]
+        acc_values = [ f"{value:4d}" for value in self.acc ]
+        return f'||  {self.z_button}  |  {self.c_button}  |  {joy_values}  |  {acc_values}  |  {self.pitch:.2f}  |  {self.roll:.2f}  ||'
 
 nunchuk = Nunchuk()
 
@@ -64,7 +69,7 @@ async def run():
     client = BleakClient(device)
 
     try:
-        timer = 45  # seconds
+        timer = 240 # seconds
 
         while timer != 0 or external_heartbeat_received:
             if not client.is_connected:
@@ -81,8 +86,8 @@ async def run():
                     await client.start_notify(PITCH_UUID, notification_handler)
                     await client.start_notify(ROLL_UUID, notification_handler)
                     print("Notify on...")
-            await asyncio.sleep(1)
-            print(nunchuk.z_button, nunchuk.c_button, nunchuk.joystick, nunchuk.acc, nunchuk.pitch, nunchuk.roll)
+            await asyncio.sleep(0.5)
+            print(str(nunchuk))
             timer -= 1
 
             # If timer expired and we received a heartbeat, restart timer and carry on.
@@ -90,6 +95,12 @@ async def run():
                 if external_heartbeat_received:
                     timer = 60
                     external_heartbeat_received = False
+
+            # force dsiconnect
+            if nunchuk.z_button == 1 & nunchuk.c_button == 1:
+                timer = 0
+                external_heartbeat_received = False
+
     except Exception as error:
         print('ERROR: ',error)
         print("Connected to {} failed".format(DEVICE_NAME))
