@@ -1,8 +1,12 @@
 import asyncio
+import Rpi.GPIO as GPIO
 
 from bleak import BleakClient, BleakScanner
-from bleak.backends.bluezdbus.client import BleakClientBlueZDBus
+from RpiMotorLib import RpiMotorLib
 
+################################
+# BLE Defines
+################################
 DEVICE_NAME = "Nunchuk"
 Z_BUTTON_UUID = '9ea41596-18ec-45a9-a194-49597368e655'
 C_BUTTON_UUID = '9ea41596-18ed-45a9-a194-49597368e655'
@@ -14,6 +18,17 @@ ACC_Z_UUID = '9ea41596-18f2-45a9-a194-49597368e655'
 PITCH_UUID = '9ea41596-18f3-45a9-a194-49597368e655'
 ROLL_UUID = '9ea41596-18f4-45a9-a194-49597368e655'
 
+################################
+# GPIO Defines
+################################
+#define GPIO pins
+GPIO_pins = (14, 15, 18) # Microstep Resolution
+direction = 20 # DIR GPIO pin
+step = 21 # Step GPIO pin
+
+################################
+# Classes
+################################
 class Nunchuk():
     def __init__(self):
         self.z_button = 0
@@ -26,11 +41,19 @@ class Nunchuk():
     def __str__(self):
         joy_values = [ f"{value:4d}" for value in self.joystick ]
         acc_values = [ f"{value:4d}" for value in self.acc ]
-        return f'||  {self.z_button}  |  {self.c_button}  |  {joy_values}  |  {acc_values}  |  {self.pitch:.2f}  |  {self.roll:.2f}  ||'
+        return f'||  {self.z_button}  |  {self.c_button}  |  {joy_values}  |  {acc_values}  |  {self.pitch:3d}  |  {self.roll:3d}  ||'
 
+################################
+# Named Class Instances
+################################
 nunchuk = Nunchuk()
+motor1 = RpiMotorLib.A4988Nema(direction, step, GPIO_pins, "DRV8825")
 
+################################
+# BLE Notiy Call-Back
+################################
 def notification_handler(sender, data):
+    external_heartbeat_received = True
     if (sender.uuid == Z_BUTTON_UUID):
         nunchuk.z_button = int.from_bytes(data, "little")
     elif (sender.uuid == C_BUTTON_UUID):
@@ -39,20 +62,21 @@ def notification_handler(sender, data):
         nunchuk.joystick[0] = int.from_bytes(data, "little", signed="True")
     elif (sender.uuid == JOYSTICK_Y_UUID):
         nunchuk.joystick[1] = int.from_bytes(data, "little", signed="True")
-    if (nunchuk.z_button):
-        if (sender.uuid == ACC_X_UUID):
-            nunchuk.acc[0] = int.from_bytes(data, "little", signed="True")
-        elif (sender.uuid == ACC_Y_UUID):
-            nunchuk.acc[1] = int.from_bytes(data, "little", signed="True")
-        elif (sender.uuid == ACC_Z_UUID):
-            nunchuk.acc[2] = int.from_bytes(data, "little", signed="True")
-    if (nunchuk.c_button):
-        if (sender.uuid == PITCH_UUID):
-            nunchuk.pitch = (int.from_bytes(data, "little", signed="True"))/1000
-        elif (sender.uuid == ROLL_UUID):
-            nunchuk.roll = (int.from_bytes(data, "little", signed="True"))/1000
+    elif (sender.uuid == ACC_X_UUID):
+        nunchuk.acc[0] = int.from_bytes(data, "little", signed="True")
+    elif (sender.uuid == ACC_Y_UUID):
+        nunchuk.acc[1] = int.from_bytes(data, "little", signed="True")
+    elif (sender.uuid == ACC_Z_UUID):
+        nunchuk.acc[2] = int.from_bytes(data, "little", signed="True")
+    elif (sender.uuid == PITCH_UUID):
+        nunchuk.pitch = (int.from_bytes(data, "little", signed="True"))
+    elif (sender.uuid == ROLL_UUID):
+        nunchuk.roll = (int.from_bytes(data, "little", signed="True"))
 
 
+################################
+# Main Program Loop
+################################
 async def run():
     client = None
     external_heartbeat_received = False
@@ -88,16 +112,17 @@ async def run():
                     print("Notify on...")
             await asyncio.sleep(0.5)
             print(str(nunchuk))
+            motor1.motor_go(False, "Full", 100, .01, False, .05)
             timer -= 1
 
             # If timer expired and we received a heartbeat, restart timer and carry on.
             if timer == 0:
                 if external_heartbeat_received:
-                    timer = 60
+                    timer = 240
                     external_heartbeat_received = False
 
             # force dsiconnect
-            if nunchuk.z_button == 1 & nunchuk.c_button == 1:
+            if (nunchuk.z_button == 1) and (nunchuk.c_button == 1):
                 timer = 0
                 external_heartbeat_received = False
 
@@ -109,6 +134,8 @@ async def run():
     if client is not None and client.is_connected:
         await client.disconnect()
         print("Disconnected from {}".format(DEVICE_NAME))
+        GPIO.cleanup()
+        print("Program Ended and GPIOs cleaned!")
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(run())
