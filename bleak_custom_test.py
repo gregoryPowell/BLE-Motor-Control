@@ -42,9 +42,9 @@ class Nunchuk:
         self.roll = 0
 
     def __str__(self):
-        joy_values = [f"{value:4d}" for value in self.joystick]
-        acc_values = [f"{value:4d}" for value in self.acc]
-        return f"||  {self.z_button}  |  {self.c_button}  |  {joy_values}  |  {acc_values}  |  {self.pitch:3d}  |  {self.roll:3d}  ||"
+        # joy_values = [f"{value}" for value in self.joystick]
+        # acc_values = [f"{value}" for value in self.acc]
+        return f"||  {self.z_button}  |  {self.c_button}  |  {self.joystick}  |  {self.acc}  |  {self.pitch}  |  {self.roll}  ||"
 
 
 ################################
@@ -64,19 +64,33 @@ def notification_handler(sender, data):
     elif sender.uuid == C_BUTTON_UUID:
         nunchuk.c_button = int.from_bytes(data, "little")
     elif sender.uuid == JOYSTICK_X_UUID:
-        nunchuk.joystick[0] = int.from_bytes(data, "little", signed="True")
+        nunchuk.joystick[0] = int.from_bytes(data, "little")
     elif sender.uuid == JOYSTICK_Y_UUID:
-        nunchuk.joystick[1] = int.from_bytes(data, "little", signed="True")
+        nunchuk.joystick[1] = int.from_bytes(data, "little")
     elif sender.uuid == ACC_X_UUID:
-        nunchuk.acc[0] = int.from_bytes(data, "little", signed="True")
+        nunchuk.acc[0] = int.from_bytes(data, "little")
     elif sender.uuid == ACC_Y_UUID:
-        nunchuk.acc[1] = int.from_bytes(data, "little", signed="True")
+        nunchuk.acc[1] = int.from_bytes(data, "little")
     elif sender.uuid == ACC_Z_UUID:
-        nunchuk.acc[2] = int.from_bytes(data, "little", signed="True")
+        nunchuk.acc[2] = int.from_bytes(data, "little")
     elif sender.uuid == PITCH_UUID:
-        nunchuk.pitch = int.from_bytes(data, "little", signed="True")
+        nunchuk.pitch = int.from_bytes(data, "little")
     elif sender.uuid == ROLL_UUID:
-        nunchuk.roll = int.from_bytes(data, "little", signed="True")
+        nunchuk.roll = int.from_bytes(data, "little")
+
+
+################################
+# Motor Controller Function
+################################
+def motor_controller():
+    if (nunchuk.joystick[0] > 128):
+        direction = False
+    elif (nunchuk.joystick[0] < 128):
+        direction = True
+    else:
+        return
+
+    motor1.motor_go(direction, "1/4", 1, 0.01, False, 0)
 
 
 ################################
@@ -98,9 +112,9 @@ async def run():
     client = BleakClient(device)
 
     try:
-        timer = 240  # seconds
-
-        while timer != 0 or external_heartbeat_received:
+        timer = 60  # seconds
+        print("attempting to connect")
+        while timer != 0:
             if not client.is_connected:
                 if await client.connect():
                     print("Connected to {}".format(DEVICE_NAME))
@@ -115,35 +129,36 @@ async def run():
                     await client.start_notify(PITCH_UUID, notification_handler)
                     await client.start_notify(ROLL_UUID, notification_handler)
                     print("Notify on...")
-            
-            print(str(nunchuk))
-            if client.is_connected:
-                motor1.motor_go(False, "1/4", 100, 0.01, False, 0.05)
-            else:
-                await asyncio.sleep(0.5)
-                timer -= 1
+                    break
 
-            # If timer expired and we received a heartbeat, restart timer and carry on.
-            if timer == 0:
-                if external_heartbeat_received:
-                    timer = 240
-                    external_heartbeat_received = False
-
-            # force dsiconnect
-            if (nunchuk.z_button == 1) and (nunchuk.c_button == 1):
-                timer = 0
-                external_heartbeat_received = False
+            await asyncio.sleep(1)
+            timer -= 1
 
     except Exception as error:
         print("ERROR: ", error)
         print("Connected to {} failed".format(DEVICE_NAME))
 
-    if client is not None and client.is_connected:
-        await client.disconnect()
-        print("Disconnected from {}".format(DEVICE_NAME))
-        GPIO.cleanup()
-        print("Program Ended and GPIOs cleaned!")
+    
+    while(client.is_connected):
+        
+        print(str(nunchuk))
+
+        motor_controller()
+        await asyncio.sleep(0)
+
+        # force disconnect
+        if (nunchuk.z_button == 255) and (nunchuk.c_button == 255):
+            await client.disconnect()
+            print("Disconnected from {}".format(DEVICE_NAME))
 
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(run())
+
+
+
+
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(run())
+
+    GPIO.cleanup()
+    print("Program Ended and GPIOs cleaned!")
