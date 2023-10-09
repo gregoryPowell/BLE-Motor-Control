@@ -97,3 +97,4 @@ The motor setup will be dependant on the motor but should be pretty straigt forw
 - [asyncio](https://docs.python.org/3/library/asyncio.html)
 - [Bleak](https://bleak.readthedocs.io/en/latest/)
 - [rpimotorlib](https://pypi.org/project/rpimotorlib/)
+- [Stepper Motor Control](https://www.rototron.info/raspberry-pi-stepper-motor-tutorial/)
